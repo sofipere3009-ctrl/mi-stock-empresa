@@ -135,7 +135,96 @@ with col_btn2:
             if lote_mod != "":
                 # CORRECCIÓN AQUÍ: Se utiliza .iloc[0] para extraer la fila correctamente como un registro individual
                 datos_viejos = df_raw[df_raw["Lote"] == lote_mod].iloc[0]
-                
+
+                # ================================================
+                # NUEVO: AJUSTE RÁPIDO (SUMAR / RESTAR) PARA
+                # STOCK, COSTO UNITARIO Y CANTIDAD RESERVADA
+                # ================================================
+                st.markdown("**➕➖ Ajuste Rápido de Cantidades**")
+
+                def bloque_ajuste(etiqueta, valor_actual, campo_key, sufijo_unidad=""):
+                    """Dibuja un mini-formulario de sumar/restar para un campo numérico
+                    y devuelve el nuevo valor si se apretó sumar o restar, o None si no."""
+                    st.caption(f"{etiqueta} actual: {valor_actual:g}{sufijo_unidad}")
+                    col_cant, col_sumar, col_restar = st.columns([2, 1, 1])
+                    with col_cant:
+                        cantidad = st.number_input(
+                            f"Cantidad a mover ({etiqueta})",
+                            min_value=0.0,
+                            value=0.0,
+                            step=1.0,
+                            key=f"cant_{campo_key}_{lote_mod}"
+                        )
+                    with col_sumar:
+                        st.write("")
+                        st.write("")
+                        click_sumar = st.button("➕ Sumar", key=f"btn_sumar_{campo_key}_{lote_mod}", use_container_width=True)
+                    with col_restar:
+                        st.write("")
+                        st.write("")
+                        click_restar = st.button("➖ Restar", key=f"btn_restar_{campo_key}_{lote_mod}", use_container_width=True)
+
+                    if click_sumar:
+                        if cantidad > 0:
+                            return float(valor_actual) + cantidad
+                        else:
+                            st.error(f"Ingresá una cantidad mayor a 0 para sumar en {etiqueta}.")
+                    if click_restar:
+                        if cantidad > 0:
+                            nuevo_valor = float(valor_actual) - cantidad
+                            if nuevo_valor < 0:
+                                st.error(f"No se puede restar más de lo que hay en {etiqueta}.")
+                            else:
+                                return nuevo_valor
+                        else:
+                            st.error(f"Ingresá una cantidad mayor a 0 para restar en {etiqueta}.")
+                    return None
+
+                # --- Cantidad en Stock ---
+                nuevo_stock = bloque_ajuste("Cantidad en Stock", datos_viejos['En_Stock'], "stock", f" {datos_viejos['UdM']}")
+                if nuevo_stock is not None:
+                    if update_full_item(
+                        lote_mod, lote_mod,
+                        datos_viejos['Ubicacion'], datos_viejos['N_Parte'], datos_viejos['Nombre_Parte'],
+                        datos_viejos['Costo_Unitario'], nuevo_stock, datos_viejos['Reservado'],
+                        datos_viejos['UdM'], datos_viejos['Estado']
+                    ):
+                        st.success(f"Cantidad en Stock actualizada a {nuevo_stock:g}.")
+                        st.rerun()
+
+                st.markdown("---")
+
+                # --- Costo Unitario ---
+                nuevo_costo = bloque_ajuste("Costo Unitario ($U)", datos_viejos['Costo_Unitario'], "costo")
+                if nuevo_costo is not None:
+                    if update_full_item(
+                        lote_mod, lote_mod,
+                        datos_viejos['Ubicacion'], datos_viejos['N_Parte'], datos_viejos['Nombre_Parte'],
+                        nuevo_costo, datos_viejos['En_Stock'], datos_viejos['Reservado'],
+                        datos_viejos['UdM'], datos_viejos['Estado']
+                    ):
+                        st.success(f"Costo Unitario actualizado a $U {nuevo_costo:g}.")
+                        st.rerun()
+
+                st.markdown("---")
+
+                # --- Cantidad Reservada ---
+                nuevo_reservado = bloque_ajuste("Cantidad Reservada", datos_viejos['Reservado'], "reservado", f" {datos_viejos['UdM']}")
+                if nuevo_reservado is not None:
+                    if update_full_item(
+                        lote_mod, lote_mod,
+                        datos_viejos['Ubicacion'], datos_viejos['N_Parte'], datos_viejos['Nombre_Parte'],
+                        datos_viejos['Costo_Unitario'], datos_viejos['En_Stock'], nuevo_reservado,
+                        datos_viejos['UdM'], datos_viejos['Estado']
+                    ):
+                        st.success(f"Cantidad Reservada actualizada a {nuevo_reservado:g}.")
+                        st.rerun()
+
+                st.markdown("---")
+                # ================================================
+                # FIN DEL BLOQUE NUEVO
+                # ================================================
+
                 with st.form("form_modificacion_total"):
                     st.markdown(f"Corrigiendo datos de: **{datos_viejos['Nombre_Parte']}**")
                     
