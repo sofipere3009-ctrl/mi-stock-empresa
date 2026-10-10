@@ -233,7 +233,49 @@ else:
     column_order = ["Lote", "Ubicación", "Nº Parte", "Nombre de Parte", "Costo Unitario ($U)", "Precio Venta ($U)", "En_Stock", "Disponible", "Reservado", "UdM", "Estado"]
     df_view = df_view[column_order]
 
+# ================================================
+# ALERTAS DE STOCK (VERDE / AMARILLO / ROJO)
+# Cambiá estos dos números si querés otros límites
+# ================================================
+UMBRAL_ROJO = 5        # menos de 5 unidades  -> ROJO (alerta arriba de todo)
+UMBRAL_AMARILLO = 10   # de 5 a 9 unidades    -> AMARILLO | 10 o más -> VERDE
+
+# Las alertas se miden con lo DISPONIBLE = En Stock - Reservado
+df_alertas = df_raw.copy()
+df_alertas["Disp"] = df_alertas["En_Stock"] - df_alertas["Reservado"]
+
+rojos = df_alertas[df_alertas["Disp"] < UMBRAL_ROJO]
+amarillos = df_alertas[(df_alertas["Disp"] >= UMBRAL_ROJO) & (df_alertas["Disp"] < UMBRAL_AMARILLO)]
+verdes = df_alertas[df_alertas["Disp"] >= UMBRAL_AMARILLO]
+
+
+def lista_productos(df):
+    """Arma una lista con viñetas: nombre, lote y unidades disponibles (stock menos reservado)."""
+    lineas = []
+    for _, fila in df.iterrows():
+        detalle = f"- **{fila['Nombre_Parte']}** (Lote {fila['Lote']}): {fila['Disp']:g} {fila['UdM']} disponibles"
+        if fila["Reservado"] > 0:
+            detalle += f" (stock {fila['En_Stock']:g}, reservado {fila['Reservado']:g})"
+        lineas.append(detalle)
+    return "\n".join(lineas)
+
+
 # --- INTERFAZ GRÁFICA DE USUARIO ---
+
+# 🔴 ALERTA ROJA: arriba de todo del programa
+if not rojos.empty:
+    st.error(
+        f"🚨 **¡ATENCIÓN! Queda poco stock (menos de {UMBRAL_ROJO} unidades):**\n\n"
+        + lista_productos(rojos)
+    )
+    # Notificación emergente (toast): salta solo cuando cambia la lista de productos en rojo
+    clave_rojos = ",".join(sorted(rojos["Lote"].astype(str)))
+    if st.session_state.get("ultima_alerta_roja") != clave_rojos:
+        st.toast(f"🚨 ¡Queda poco stock en {len(rojos)} producto(s)!", icon="🚨")
+        st.session_state["ultima_alerta_roja"] = clave_rojos
+else:
+    st.session_state["ultima_alerta_roja"] = ""
+
 st.title("📦 Sistema de Control de Stock Interno")
 st.caption("Base de Datos Permanente Activa | Moneda: Pesos Uruguayos ($U)")
 st.markdown("---")
@@ -461,6 +503,28 @@ with col_btn3:
 with col_btn4:
     csv_bytes = df_view.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Exportar CSV", csv_bytes, "reporte_stock.csv", "text/csv", disabled=df_view.empty, use_container_width=True)
+
+# ================================================
+# SECCIÓN APARTE: AVISOS DE STOCK
+# ================================================
+st.markdown("### 🚦 Avisos de Stock")
+if df_raw.empty:
+    st.info("Todavía no hay productos cargados.")
+else:
+    # 🟡 AMARILLO: importante pero no tanto (de 5 a 9 unidades). Va más arriba que el verde.
+    if not amarillos.empty:
+        st.warning(
+            f"⚠️ **Stock bajo (menos de {UMBRAL_AMARILLO} unidades), conviene reponer:**\n\n"
+            + lista_productos(amarillos)
+        )
+    # 🟢 VERDE: todo bien ({UMBRAL_AMARILLO} o más). Solo informa, no salta nada.
+    if not verdes.empty:
+        st.success(
+            f"✅ **Stock normal ({UMBRAL_AMARILLO} unidades o más):**\n\n"
+            + lista_productos(verdes)
+        )
+    if amarillos.empty and rojos.empty:
+        st.caption("No hay productos con stock bajo por ahora.")
 
 # Sección de búsqueda y filtrado interactivo
 st.markdown("### 🔍 Buscador y Filtros del Almacén")
